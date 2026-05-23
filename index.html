@@ -90,6 +90,40 @@
   }
   .icon-btn:active { transform: scale(.92); }
   .icon-btn svg { width: 18px; height: 18px; }
+  .icon-btn.active {
+    background: linear-gradient(135deg, rgba(232,184,224,.92), rgba(184,163,224,.92));
+    color: #fff;
+    border-color: rgba(255,255,255,.95);
+    box-shadow: 0 6px 16px rgba(150,110,210,.35);
+  }
+
+  /* camera flash overlay */
+  .flash {
+    position: absolute; inset: 0;
+    background: #fff;
+    pointer-events: none;
+    opacity: 0; z-index: 3;
+    border-radius: inherit;
+  }
+  .flash.fire { animation: flashAnim .45s ease-out; }
+  @keyframes flashAnim {
+    0%   { opacity: 0; }
+    10%  { opacity: .75; }
+    100% { opacity: 0; }
+  }
+
+  /* fullscreen overrides — frame fills viewport */
+  #frame:fullscreen,
+  #frame:-webkit-full-screen {
+    width: 100vw; height: 100vh;
+    max-height: none; aspect-ratio: auto;
+    border-radius: 0;
+    background: radial-gradient(1200px 800px at 50% 110%, #f9e6ff 0%, #e7d6fb 45%, #d8c6f3 100%);
+  }
+  #frame:fullscreen canvas#gl,
+  #frame:-webkit-full-screen canvas#gl { border-radius: 0; }
+  #frame:fullscreen .themes,
+  #frame:-webkit-full-screen .themes { display: none; }
 
   /* theme picker */
   .themes {
@@ -189,6 +223,7 @@
       left: max(env(safe-area-inset-left), 16px);
       bottom: calc(78px + env(safe-area-inset-bottom));
     }
+    .desktop-only { display: none !important; }
   }
 </style>
 </head>
@@ -200,6 +235,15 @@
       <div class="topbar">
         <div class="pill"><span class="dot"></span><span id="title">marble</span></div>
         <div class="spacer"></div>
+        <button class="icon-btn desktop-only" id="auto" title="自動モード" aria-label="自動モード" aria-pressed="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0l1.58 6.13A2 2 0 0 0 15.5 9.94l6.13 1.58a.5.5 0 0 1 0 .96l-6.13 1.58A2 2 0 0 0 14.06 15.5l-1.58 6.13a.5.5 0 0 1-.96 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></svg>
+        </button>
+        <button class="icon-btn desktop-only" id="fullscreen" title="全画面" aria-label="全画面">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+        </button>
+        <button class="icon-btn" id="camera" title="スクリーンショット" aria-label="スクリーンショット">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7.5 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3.5l-2-3z"/><circle cx="12" cy="13" r="3.2"/></svg>
+        </button>
         <button class="icon-btn" id="shuffle" title="シャッフル" aria-label="シャッフル">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/><path d="M16 21h5v-5"/><path d="M21 21l-7-7"/><path d="M3 3l7 7"/></svg>
         </button>
@@ -214,6 +258,8 @@
       </div>
 
       <div class="hint" id="hint">指でかき混ぜてみて ✨</div>
+
+      <div class="flash" id="flash"></div>
 
       <div class="themes" id="themes"></div>
     </div>
@@ -844,6 +890,151 @@
     });
   }
 
+  // ---------- fullscreen ----------
+  const frameEl = document.getElementById('frame');
+  const fsBtn = document.getElementById('fullscreen');
+  function inFullscreen() {
+    return !!(document.fullscreenElement || document.webkitFullscreenElement);
+  }
+  async function toggleFullscreen() {
+    try {
+      if (!inFullscreen()) {
+        if (frameEl.requestFullscreen) await frameEl.requestFullscreen();
+        else if (frameEl.webkitRequestFullscreen) frameEl.webkitRequestFullscreen();
+      } else {
+        if (document.exitFullscreen) await document.exitFullscreen();
+        else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+      }
+    } catch (err) { console.error(err); }
+  }
+  function updateFsBtn() {
+    if (!fsBtn) return;
+    fsBtn.classList.toggle('active', inFullscreen());
+    fsBtn.setAttribute('aria-pressed', String(inFullscreen()));
+  }
+  if (fsBtn) {
+    fsBtn.addEventListener('click', toggleFullscreen);
+    document.addEventListener('fullscreenchange', updateFsBtn);
+    document.addEventListener('webkitfullscreenchange', updateFsBtn);
+  }
+
+  // ---------- auto mode ----------
+  // Procedural stirring: alternates "stir" phases (1–3 looping virtual
+  // pointers tracing arcs) with short "rest" phases that swap themes.
+  // Pauses while the user is actively dragging.
+  let autoMode = false;
+  let autoPhase = 'stir';
+  let autoPhaseEndsAt = 0;
+  let autoStrokes = [];
+
+  function spawnAutoStroke() {
+    const rect = canvas.getBoundingClientRect();
+    const minSide = Math.min(rect.width, rect.height);
+    autoStrokes.push({
+      cx: rect.width  * (0.22 + Math.random() * 0.56),
+      cy: rect.height * (0.22 + Math.random() * 0.56),
+      angle: Math.random() * Math.PI * 2,
+      radius: minSide * (0.09 + Math.random() * 0.20),
+      speed: 0.9 + Math.random() * 1.3,
+      dir: Math.random() < 0.5 ? 1 : -1,
+      prev: null,
+    });
+  }
+  function beginStir() {
+    autoPhase = 'stir';
+    autoPhaseEndsAt = nowSec() + 5.5 + Math.random() * 4.0;
+    autoStrokes.length = 0;
+    const n = 1 + Math.floor(Math.random() * 2);
+    for (let i = 0; i < n; i++) spawnAutoStroke();
+  }
+  // Rest phase: pause splats so the heal can pull dye partway back.
+  // Theme stays put — only re-spawning new stroke shapes for variety.
+  function beginRest() {
+    autoPhase = 'rest';
+    autoPhaseEndsAt = nowSec() + 2.8 + Math.random() * 2.2;
+    autoStrokes.length = 0;
+  }
+  function autoTick(dt) {
+    if (!autoMode) return;
+    if (pointers.size > 0) { autoStrokes.length = 0; return; }
+    const now = nowSec();
+    if (now >= autoPhaseEndsAt) {
+      if (autoPhase === 'stir') beginRest(); else beginStir();
+    }
+    if (autoPhase !== 'stir') return;
+    const rect = canvas.getBoundingClientRect();
+    for (const s of autoStrokes) {
+      s.angle += s.dir * s.speed * dt;
+      const x = s.cx + Math.cos(s.angle) * s.radius;
+      const y = s.cy + Math.sin(s.angle) * s.radius;
+      if (s.prev) {
+        let dx = (x - s.prev.x) / rect.width;
+        let dy = (y - s.prev.y) / rect.height;
+        const m = Math.hypot(dx, dy);
+        if (m > 0.05) { dx *= 0.05 / m; dy *= 0.05 / m; }
+        splat(x, y, dx, dy);
+        lastInputTime = now;
+      }
+      s.prev = { x, y };
+    }
+  }
+  function setAutoMode(on) {
+    autoMode = on;
+    const btn = document.getElementById('auto');
+    if (btn) {
+      btn.classList.toggle('active', on);
+      btn.setAttribute('aria-pressed', String(on));
+    }
+    if (on) { dismissHint(); beginStir(); }
+    else autoStrokes.length = 0;
+  }
+  const autoBtn = document.getElementById('auto');
+  if (autoBtn) autoBtn.addEventListener('click', () => setAutoMode(!autoMode));
+
+  // ---------- screenshot ----------
+  function takeScreenshot() {
+    // Re-render synchronously so the default framebuffer has fresh pixels
+    // (the context was created with preserveDrawingBuffer: false).
+    render();
+    const w = canvasW, h = canvasH;
+    const pixels = new Uint8Array(w * h * 4);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    const ctx = cv.getContext('2d');
+    const img = ctx.createImageData(w, h);
+    // WebGL origin is bottom-left; flip Y into the 2D canvas.
+    for (let y = 0; y < h; y++) {
+      const src = (h - 1 - y) * w * 4;
+      const dst = y * w * 4;
+      img.data.set(pixels.subarray(src, src + w * 4), dst);
+    }
+    ctx.putImageData(img, 0, 0);
+
+    cv.toBlob((blob) => {
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      a.download = `marble-${currentTheme.id}-${ts}.png`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    }, 'image/png');
+
+    const fl = document.getElementById('flash');
+    if (fl) {
+      fl.classList.remove('fire');
+      void fl.offsetWidth;
+      fl.classList.add('fire');
+    }
+  }
+  document.getElementById('camera').addEventListener('click', takeScreenshot);
+
   // ---------- boot ----------
   function boot() {
     resize();
@@ -854,6 +1045,7 @@
       const dt = Math.min(0.033, (now - last) / 1000);
       last = now;
       if (resize()) { paintBase(); snapToBase(); clearFlow(); }
+      autoTick(dt || 0.016);
       step(dt || 0.016);
       render();
       requestAnimationFrame(frame);
