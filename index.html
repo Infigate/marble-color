@@ -1,0 +1,840 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+<meta name="theme-color" content="#e9dffb" />
+<title>marble — 指で混ぜる夢色マシュマロ</title>
+<style>
+  :root {
+    --bg: #efe5fb;
+    --panel: rgba(255,255,255,.55);
+    --panel-border: rgba(255,255,255,.85);
+    --ink: #5b4a7a;
+    --ink-soft: #8a7aa8;
+    --accent: #b8a3e0;
+    --shadow: 0 8px 28px rgba(120, 90, 180, .18);
+  }
+  *,*::before,*::after { box-sizing: border-box; }
+  html,body {
+    margin: 0; padding: 0; height: 100%;
+    background: radial-gradient(1200px 800px at 50% 110%, #f9e6ff 0%, #e7d6fb 45%, #d8c6f3 100%);
+    overflow: hidden; color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Maru Gothic ProN", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: none;
+    overscroll-behavior: none;
+  }
+  #stage {
+    position: fixed; inset: 0;
+    display: grid; place-items: center;
+    padding: max(env(safe-area-inset-top), 14px) max(env(safe-area-inset-right), 14px) max(env(safe-area-inset-bottom), 14px) max(env(safe-area-inset-left), 14px);
+  }
+  #frame {
+    position: relative;
+    width: min(94vmin, 720px);
+    aspect-ratio: 4 / 5;
+    max-height: 92vh;
+    border-radius: 28px;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,.45), rgba(255,255,255,.1));
+    box-shadow:
+      inset 0 0 0 1px rgba(255,255,255,.6),
+      0 30px 60px rgba(120,90,180,.25),
+      0 6px 14px rgba(120,90,180,.15);
+    overflow: hidden;
+    isolation: isolate;
+  }
+  canvas#gl {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    display: block; border-radius: inherit;
+    cursor: grab;
+  }
+  canvas#gl:active { cursor: grabbing; }
+
+  .topbar {
+    position: absolute; top: 12px; left: 12px; right: 12px;
+    display: flex; align-items: center; gap: 8px;
+    pointer-events: none; z-index: 2;
+  }
+  .pill {
+    pointer-events: auto;
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 8px 14px;
+    background: var(--panel);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    border: 1px solid var(--panel-border);
+    border-radius: 999px;
+    font-size: 13px; font-weight: 600; color: var(--ink);
+    box-shadow: var(--shadow);
+  }
+  .pill .dot {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: conic-gradient(from 0deg, #ffc1d8, #c8a4d8, #a8c8e8, #c8e8c8, #fff4b8, #ffc1d8);
+    box-shadow: inset 0 0 0 2px rgba(255,255,255,.85);
+  }
+  .spacer { flex: 1; }
+  .icon-btn {
+    pointer-events: auto;
+    width: 38px; height: 38px; border: none; border-radius: 50%;
+    background: var(--panel);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    border: 1px solid var(--panel-border);
+    color: var(--ink); cursor: pointer;
+    display: grid; place-items: center;
+    box-shadow: var(--shadow);
+    transition: transform .15s ease;
+  }
+  .icon-btn:active { transform: scale(.92); }
+  .icon-btn svg { width: 18px; height: 18px; }
+
+  /* theme picker */
+  .themes {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    padding: 10px 12px 14px;
+    display: flex; gap: 8px; overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    z-index: 2;
+    background: linear-gradient(180deg, rgba(255,255,255,0), rgba(255,255,255,.35) 60%, rgba(255,255,255,.55));
+    -webkit-mask-image: linear-gradient(180deg, transparent 0%, black 30%);
+            mask-image: linear-gradient(180deg, transparent 0%, black 30%);
+  }
+  .themes::-webkit-scrollbar { display: none; }
+  .chip {
+    flex: 0 0 auto;
+    display: inline-flex; flex-direction: column; align-items: center;
+    gap: 6px; padding: 6px 10px 8px;
+    border-radius: 18px;
+    background: rgba(255,255,255,.55);
+    border: 1px solid rgba(255,255,255,.9);
+    color: var(--ink);
+    font-size: 11px; font-weight: 700;
+    cursor: pointer;
+    transition: transform .15s ease, background .2s ease, border-color .2s ease, box-shadow .2s ease;
+    box-shadow: 0 4px 10px rgba(120,90,180,.12);
+  }
+  .chip:hover { transform: translateY(-1px); }
+  .chip .swatch {
+    width: 36px; height: 24px; border-radius: 10px;
+    box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.85), 0 2px 4px rgba(120,90,180,.18);
+  }
+  .chip .ja { font-size: 10px; color: var(--ink-soft); font-weight: 600; letter-spacing: .04em;}
+  .chip.active {
+    background: rgba(255,255,255,.95);
+    border-color: var(--accent);
+    box-shadow: 0 6px 16px rgba(150,110,210,.3);
+    transform: translateY(-1px);
+  }
+
+  /* hint */
+  .hint {
+    position: absolute; left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    padding: 10px 18px;
+    border-radius: 999px;
+    background: rgba(255,255,255,.7);
+    border: 1px solid rgba(255,255,255,.9);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    color: var(--ink);
+    font-size: 13px; font-weight: 700;
+    box-shadow: var(--shadow);
+    opacity: 0;
+    animation: hintIn .8s .3s ease forwards, hintBob 2.4s 1.1s ease-in-out infinite;
+    z-index: 2;
+  }
+  .hint.gone { animation: hintOut .5s ease forwards; }
+  @keyframes hintIn  { from { opacity: 0; transform: translate(-50%, calc(-50% + 8px)); } to { opacity: 1; transform: translate(-50%, -50%); } }
+  @keyframes hintOut { to   { opacity: 0; transform: translate(-50%, calc(-50% - 8px)); } }
+  @keyframes hintBob { 0%,100% { } 50% { transform: translate(-50%, calc(-50% - 4px)); } }
+
+  .name {
+    position: absolute; left: 16px; bottom: 78px;
+    z-index: 2; pointer-events: none;
+    color: var(--ink);
+    font-weight: 800; font-size: 22px;
+    text-shadow: 0 1px 0 rgba(255,255,255,.7);
+    letter-spacing: .02em;
+  }
+  .name .jp { display: block; font-size: 11px; font-weight: 700; color: var(--ink-soft); letter-spacing: .12em; margin-bottom: 2px; }
+</style>
+</head>
+<body>
+  <div id="stage">
+    <div id="frame">
+      <canvas id="gl"></canvas>
+
+      <div class="topbar">
+        <div class="pill"><span class="dot"></span><span id="title">marble</span></div>
+        <div class="spacer"></div>
+        <button class="icon-btn" id="shuffle" title="シャッフル" aria-label="シャッフル">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/><path d="M16 21h5v-5"/><path d="M21 21l-7-7"/><path d="M3 3l7 7"/></svg>
+        </button>
+        <button class="icon-btn" id="reset" title="リセット" aria-label="リセット">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+        </button>
+      </div>
+
+      <div class="name" id="name">
+        <span class="jp" id="nameJa">レンボーマカロン</span>
+        <span id="nameEn">Cloud Fairy</span>
+      </div>
+
+      <div class="hint" id="hint">指でかき混ぜてみて ✨</div>
+
+      <div class="themes" id="themes"></div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  'use strict';
+
+  // ---------- themes ----------
+  const THEMES = [
+    { id: 'cloudFairy',  jp: 'レンボーマカロン', name: 'Cloud Fairy',
+      colors: ['#ffc1d8','#c8a4f0','#a8c8f0','#bfe6c8','#fff0a8','#ffc1d8'] },
+    { id: 'candyCane',   jp: '駄菓子',           name: 'Candy Cane',
+      colors: ['#ff5f6d','#ffffff','#a8e6a8','#ffffff','#ff5f6d','#ffffff'] },
+    { id: 'coralReef',   jp: '珊瑚礁',           name: 'Coral Reef',
+      colors: ['#82c8ec','#ffe4c8','#ff8a5c','#fff8e8','#82c8ec'] },
+    { id: 'loveSight',   jp: '一目惚れ',         name: 'Love at First Sight',
+      colors: ['#fff0f5','#ffd6e0','#ff9fb8','#ffd6e0','#ffe8b0','#ffffff'] },
+    { id: 'spring',      jp: '桜吹雪',           name: 'Spring Sprout',
+      colors: ['#cdeab0','#ffffff','#ffd0e0','#fff6c8','#cdeab0','#ffffff'] },
+    { id: 'rosewood',    jp: '桜餅',             name: 'Rosewood',
+      colors: ['#c98a5a','#f7d8b8','#ec9fb2','#c98a5a','#fff0e0','#ec9fb2'] },
+    { id: 'orchid',      jp: 'ユニコーン',       name: 'Orchid Whisper',
+      colors: ['#f0c0e0','#c8a8e8','#a8c8f0','#fff0e0','#f0c0e0','#c8a8e8'] },
+    { id: 'trick',       jp: '柚子ラベンダー',   name: 'Trick or Treat',
+      colors: ['#fff0a0','#b8a8e8','#fff8e8','#ffd66a','#b8a8e8','#fff0a0'] },
+    { id: 'nebula',      jp: '星雲の夢',         name: 'Nebula Dream',
+      colors: ['#a8c8f0','#e8b8e0','#fff0f8','#88b0e8','#e8b8e0','#a8c8f0'] },
+    { id: 'smore',       jp: 'ティラミスマシュマロ', name: "S'more",
+      colors: ['#5a3a2a','#e0b890','#fff4d8','#8a5a3a','#fff4d8','#5a3a2a'] },
+    { id: 'summer',      jp: '青空',             name: 'Summer Breeze',
+      colors: ['#82d8ec','#fff4a8','#bce4f0','#82d8ec','#fff4a8','#a8d8e8'] },
+  ];
+
+  // ---------- WebGL setup ----------
+  const canvas = document.getElementById('gl');
+  let gl = canvas.getContext('webgl2', { alpha: true, premultipliedAlpha: false, antialias: false, preserveDrawingBuffer: false });
+  let isWebGL2 = !!gl;
+  if (!gl) {
+    gl = canvas.getContext('webgl', { alpha: true, premultipliedAlpha: false, antialias: false }) ||
+         canvas.getContext('experimental-webgl');
+  }
+  if (!gl) {
+    document.getElementById('frame').innerHTML = '<div style="padding:24px;text-align:center;color:#5b4a7a;font-weight:700">この環境では WebGL が利用できません 🥲</div>';
+    return;
+  }
+
+  // Float texture support
+  let internalRGBA, internalRG, formatRGBA, formatRG, halfType;
+  if (isWebGL2) {
+    gl.getExtension('EXT_color_buffer_float');
+    gl.getExtension('OES_texture_float_linear');
+    internalRGBA = gl.RGBA16F; formatRGBA = gl.RGBA;
+    internalRG   = gl.RG16F;   formatRG   = gl.RG;
+    halfType     = gl.HALF_FLOAT;
+  } else {
+    const halfExt = gl.getExtension('OES_texture_half_float');
+    gl.getExtension('OES_texture_half_float_linear');
+    internalRGBA = gl.RGBA; formatRGBA = gl.RGBA;
+    internalRG   = gl.RGBA; formatRG   = gl.RGBA;
+    halfType     = halfExt ? halfExt.HALF_FLOAT_OES : gl.UNSIGNED_BYTE;
+  }
+
+  function compile(type, src) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+      console.error(gl.getShaderInfoLog(s), src);
+      throw new Error('shader compile failed');
+    }
+    return s;
+  }
+  function program(vs, fs) {
+    const p = gl.createProgram();
+    gl.attachShader(p, compile(gl.VERTEX_SHADER, vs));
+    gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fs));
+    gl.bindAttribLocation(p, 0, 'a_pos');
+    gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
+      console.error(gl.getProgramInfoLog(p));
+      throw new Error('program link failed');
+    }
+    const uniforms = {};
+    const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+    for (let i = 0; i < n; i++) {
+      const info = gl.getActiveUniform(p, i);
+      uniforms[info.name] = gl.getUniformLocation(p, info.name);
+    }
+    return { prog: p, u: uniforms };
+  }
+
+  // fullscreen triangle
+  const quadBuf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1, 3]), gl.STATIC_DRAW);
+
+  const HEAD = isWebGL2
+    ? `#version 300 es\nprecision highp float; precision highp sampler2D;`
+    : `precision highp float; precision highp sampler2D;`;
+  const VOUT = isWebGL2 ? 'out vec2 v_uv;' : 'varying vec2 v_uv;';
+  const VIN  = isWebGL2 ? 'in vec2 v_uv;'  : 'varying vec2 v_uv;';
+  const ATTR = isWebGL2 ? 'in vec2 a_pos;' : 'attribute vec2 a_pos;';
+  const FRAG_OUT_DECL = isWebGL2 ? 'out vec4 fragColor;' : '';
+  const FRAG_OUT = isWebGL2 ? 'fragColor' : 'gl_FragColor';
+  const TEX = isWebGL2 ? 'texture' : 'texture2D';
+
+  const VS = `${HEAD}
+    ${ATTR}
+    ${VOUT}
+    void main(){
+      v_uv = a_pos * 0.5 + 0.5;
+      gl_Position = vec4(a_pos, 0.0, 1.0);
+    }`;
+
+  function FS(body) {
+    return `${HEAD}
+      ${VIN}
+      ${FRAG_OUT_DECL}
+      ${body}
+    `;
+  }
+
+  // ---------- shaders ----------
+  const splatProg = program(VS, FS(`
+    uniform sampler2D u_src;
+    uniform vec2 u_point;       // 0..1 uv
+    uniform vec3 u_value;
+    uniform float u_radius;     // in uv units squared
+    uniform float u_aspect;     // width / height
+    void main(){
+      vec2 p = v_uv - u_point;
+      p.x *= u_aspect;
+      float falloff = exp(-dot(p,p) / u_radius);
+      vec3 base = ${TEX}(u_src, v_uv).xyz;
+      ${FRAG_OUT} = vec4(base + u_value * falloff, 1.0);
+    }`));
+
+  const advectProg = program(VS, FS(`
+    uniform sampler2D u_src;
+    uniform sampler2D u_vel;
+    uniform vec2 u_texel;       // 1/sim size
+    uniform float u_dt;
+    uniform float u_dissipation;
+    void main(){
+      vec2 vel = ${TEX}(u_vel, v_uv).xy;
+      vec2 coord = v_uv - vel * u_dt * u_texel;
+      ${FRAG_OUT} = ${TEX}(u_src, coord) * u_dissipation;
+    }`));
+
+  const divProg = program(VS, FS(`
+    uniform sampler2D u_vel;
+    uniform vec2 u_texel;
+    void main(){
+      float l = ${TEX}(u_vel, v_uv - vec2(u_texel.x, 0.0)).x;
+      float r = ${TEX}(u_vel, v_uv + vec2(u_texel.x, 0.0)).x;
+      float b = ${TEX}(u_vel, v_uv - vec2(0.0, u_texel.y)).y;
+      float t = ${TEX}(u_vel, v_uv + vec2(0.0, u_texel.y)).y;
+      vec2 c = ${TEX}(u_vel, v_uv).xy;
+      // reflect at boundaries
+      if (v_uv.x < u_texel.x)        { l = -c.x; }
+      if (v_uv.x > 1.0 - u_texel.x)  { r = -c.x; }
+      if (v_uv.y < u_texel.y)        { b = -c.y; }
+      if (v_uv.y > 1.0 - u_texel.y)  { t = -c.y; }
+      float div = 0.5 * (r - l + t - b);
+      ${FRAG_OUT} = vec4(div, 0.0, 0.0, 1.0);
+    }`));
+
+  const pressureProg = program(VS, FS(`
+    uniform sampler2D u_p;
+    uniform sampler2D u_div;
+    uniform vec2 u_texel;
+    void main(){
+      float l = ${TEX}(u_p, v_uv - vec2(u_texel.x, 0.0)).x;
+      float r = ${TEX}(u_p, v_uv + vec2(u_texel.x, 0.0)).x;
+      float b = ${TEX}(u_p, v_uv - vec2(0.0, u_texel.y)).x;
+      float t = ${TEX}(u_p, v_uv + vec2(0.0, u_texel.y)).x;
+      float d = ${TEX}(u_div, v_uv).x;
+      float p = (l + r + b + t - d) * 0.25;
+      ${FRAG_OUT} = vec4(p, 0.0, 0.0, 1.0);
+    }`));
+
+  const gradSubProg = program(VS, FS(`
+    uniform sampler2D u_p;
+    uniform sampler2D u_vel;
+    uniform vec2 u_texel;
+    void main(){
+      float l = ${TEX}(u_p, v_uv - vec2(u_texel.x, 0.0)).x;
+      float r = ${TEX}(u_p, v_uv + vec2(u_texel.x, 0.0)).x;
+      float b = ${TEX}(u_p, v_uv - vec2(0.0, u_texel.y)).x;
+      float t = ${TEX}(u_p, v_uv + vec2(0.0, u_texel.y)).x;
+      vec2 v = ${TEX}(u_vel, v_uv).xy;
+      v -= vec2(r - l, t - b);
+      ${FRAG_OUT} = vec4(v, 0.0, 1.0);
+    }`));
+
+  const clearProg = program(VS, FS(`
+    uniform sampler2D u_src;
+    uniform float u_value;
+    void main(){
+      ${FRAG_OUT} = ${TEX}(u_src, v_uv) * u_value;
+    }`));
+
+  // Initial striped pattern. Up to 8 colors.
+  const initProg = program(VS, FS(`
+    uniform int u_n;
+    uniform vec3 u_colors[8];
+    uniform float u_seed;
+    uniform float u_aspect;
+    void main(){
+      // wavy horizontal bands with smooth blending
+      float y = v_uv.y;
+      // gentle distortion
+      float w1 = sin((v_uv.x * 4.0 + u_seed) * 3.14159) * 0.012;
+      float w2 = sin((v_uv.x * 9.0 - u_seed * 1.7) * 3.14159) * 0.006;
+      y += w1 + w2;
+      float n = float(u_n);
+      float s = y * n - 0.5;
+      int idx = int(floor(s));
+      float t = fract(s);
+      // smooth band edges
+      float k = smoothstep(0.35, 0.65, t);
+      int a = int(clamp(float(idx), 0.0, n - 1.0));
+      int b = int(clamp(float(idx + 1), 0.0, n - 1.0));
+      vec3 ca = u_colors[a];
+      vec3 cb = u_colors[b];
+      vec3 col = mix(ca, cb, k);
+      // sparkle highlights
+      float h = sin(v_uv.x * 60.0 + u_seed * 11.0) * sin(v_uv.y * 80.0 - u_seed * 7.0);
+      col += vec3(0.012) * smoothstep(0.6, 1.0, h);
+      ${FRAG_OUT} = vec4(col, 1.0);
+    }`));
+
+  // Home UV: each pixel stores the *original* coordinate of the dye particle
+  // currently at this pixel. Initialized to identity. Advected by the fluid
+  // velocity (so it tracks the deformation). Display samples baseDye at
+  // home(uv) — this is dye visualized via a deformation map. To "un-mix" we
+  // just lerp home back to v_uv: the swirl literally rewinds.
+  const initHomeProg = program(VS, FS(`
+    void main(){ ${FRAG_OUT} = vec4(v_uv, 0.0, 1.0); }
+  `));
+
+  const healHomeProg = program(VS, FS(`
+    uniform sampler2D u_home;
+    uniform float u_amount;
+    void main(){
+      vec2 h = ${TEX}(u_home, v_uv).xy;
+      ${FRAG_OUT} = vec4(mix(h, v_uv, clamp(u_amount, 0.0, 1.0)), 0.0, 1.0);
+    }`));
+
+  const displayProg = program(VS, FS(`
+    uniform sampler2D u_home;
+    uniform sampler2D u_base;
+    void main(){
+      vec2 h = ${TEX}(u_home, v_uv).xy;
+      vec3 c = ${TEX}(u_base, h).rgb;
+      // soft tone lift + gentle warm tint
+      c = pow(c, vec3(0.95));
+      c += 0.02 * vec3(1.0, 0.95, 1.05);
+      ${FRAG_OUT} = vec4(c, 1.0);
+    }`));
+
+  function useProg(p) {
+    gl.useProgram(p.prog);
+    gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+  }
+  function draw(fbo, w, h) {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.viewport(0, 0, w, h);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
+  // ---------- framebuffers ----------
+  function createFBO(w, h, internal, format, type, filter) {
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
+    gl.texImage2D(gl.TEXTURE_2D, 0, internal, w, h, 0, format, type, null);
+    const fbo = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    const st = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+    if (st !== gl.FRAMEBUFFER_COMPLETE) {
+      console.error('FBO incomplete', { status: st.toString(16), internal: internal.toString(16), format: format.toString(16), type: type.toString(16), filter: filter.toString(16) });
+    }
+    return { tex, fbo, w, h, attach(unit){ gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, tex); return unit; } };
+  }
+  function createDouble(w, h, internal, format, type, filter) {
+    let a = createFBO(w, h, internal, format, type, filter);
+    let b = createFBO(w, h, internal, format, type, filter);
+    return {
+      get read(){ return a; },
+      get write(){ return b; },
+      swap(){ const t = a; a = b; b = t; }
+    };
+  }
+
+  let home, baseDye, velocity, divergence, pressure;
+  let simW = 256, simH = 256, dyeW = 1024, dyeH = 1024;
+  let canvasW = 0, canvasH = 0;
+  let dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const rect = canvas.getBoundingClientRect();
+    const w = Math.max(1, Math.round(rect.width * dpr));
+    const h = Math.max(1, Math.round(rect.height * dpr));
+    if (w === canvasW && h === canvasH) return false;
+    canvasW = w; canvasH = h;
+    canvas.width = w; canvas.height = h;
+    // sim & dye resolutions
+    const longSide = Math.max(w, h);
+    const dyeLong = Math.min(1024, longSide);
+    const simLong = 256;
+    const ar = w / h;
+    if (ar >= 1) {
+      dyeW = dyeLong; dyeH = Math.round(dyeLong / ar);
+      simW = simLong; simH = Math.round(simLong / ar);
+    } else {
+      dyeH = dyeLong; dyeW = Math.round(dyeLong * ar);
+      simH = simLong; simW = Math.round(simLong * ar);
+    }
+    // (re)create
+    const linear = gl.LINEAR;
+    home       = createDouble(dyeW, dyeH, internalRG,   formatRG,   halfType, linear);
+    baseDye    = createFBO   (dyeW, dyeH, internalRGBA, formatRGBA, halfType, linear);
+    velocity   = createDouble(simW, simH, internalRG,   formatRG,   halfType, linear);
+    divergence = createFBO   (simW, simH, internalRGBA, formatRGBA, halfType, gl.NEAREST);
+    pressure   = createDouble(simW, simH, internalRGBA, formatRGBA, halfType, gl.NEAREST);
+    return true;
+  }
+
+  // ---------- color utilities ----------
+  function hexToRgb(hex) {
+    const s = hex.replace('#','');
+    const r = parseInt(s.substr(0,2),16)/255;
+    const g = parseInt(s.substr(2,2),16)/255;
+    const b = parseInt(s.substr(4,2),16)/255;
+    return [r, g, b];
+  }
+
+  // ---------- init pattern ----------
+  let currentTheme = THEMES[0];
+  let baseSeed = Math.random() * 100.0;
+
+  function paintBase() {
+    useProg(initProg);
+    const cols = currentTheme.colors.slice(0, 8);
+    while (cols.length < 8) cols.push(cols[cols.length - 1]);
+    const flat = new Float32Array(8 * 3);
+    for (let i = 0; i < 8; i++) {
+      const [r,g,b] = hexToRgb(cols[i]);
+      flat[i*3+0] = r; flat[i*3+1] = g; flat[i*3+2] = b;
+    }
+    gl.uniform3fv(initProg.u['u_colors[0]'], flat);
+    gl.uniform1i(initProg.u['u_n'], currentTheme.colors.length);
+    gl.uniform1f(initProg.u['u_seed'], baseSeed);
+    gl.uniform1f(initProg.u['u_aspect'], canvasW / canvasH);
+    draw(baseDye.fbo, dyeW, dyeH);
+  }
+
+  function snapToBase() {
+    // Reset home → identity (each pixel maps to itself), erasing displacement.
+    useProg(initHomeProg);
+    draw(home.write.fbo, dyeW, dyeH); home.swap();
+  }
+
+  function clearFlow() {
+    useProg(clearProg);
+    gl.uniform1f(clearProg.u['u_value'], 0.0);
+    velocity.read.attach(0); gl.uniform1i(clearProg.u['u_src'], 0);
+    draw(velocity.write.fbo, simW, simH); velocity.swap();
+    pressure.read.attach(0); gl.uniform1i(clearProg.u['u_src'], 0);
+    draw(pressure.write.fbo, simW, simH); pressure.swap();
+  }
+
+  function resetAll(opts = {}) {
+    if (opts.newSeed !== false) baseSeed = Math.random() * 100.0;
+    paintBase();
+    snapToBase();
+    clearFlow();
+  }
+
+  // ---------- simulation step ----------
+  // Velocity is stored as "pixels per second of the sim grid". Advection does
+  // new_uv = old_uv - velocity * dt * (1/simW, 1/simH), so the velocity field
+  // is independent of dye resolution.
+  const VELOCITY_DISSIPATION = 0.975;
+  const PRESSURE_ITERS       = 24;
+  const SPLAT_FORCE          = 1800.0;
+  const SPLAT_RADIUS         = 0.003;
+  // Heal: rewind the deformation back toward the identity map. Paused while
+  // the user is touching, then ramped up after a short grace.
+  // 0.35/sec → visible rewind animation over ~6–10 seconds.
+  const HEAL_RATE            = 0.35;
+  const HEAL_HOLD_OFF        = 0.3;  // sec of grace after last input
+  const HEAL_RAMP            = 0.8;  // sec to ramp from 0 to full
+
+  function splat(x, y, dx, dy) {
+    const rect = canvas.getBoundingClientRect();
+    const u = x / rect.width;
+    const v = 1.0 - y / rect.height;
+    const aspect = rect.width / rect.height;
+
+    useProg(splatProg);
+    velocity.read.attach(0); gl.uniform1i(splatProg.u['u_src'], 0);
+    gl.uniform2f(splatProg.u['u_point'], u, v);
+    gl.uniform3f(splatProg.u['u_value'], dx * SPLAT_FORCE, -dy * SPLAT_FORCE, 0.0);
+    gl.uniform1f(splatProg.u['u_radius'], SPLAT_RADIUS);
+    gl.uniform1f(splatProg.u['u_aspect'], aspect);
+    draw(velocity.write.fbo, simW, simH); velocity.swap();
+  }
+
+  function step(dt) {
+    // advect velocity
+    useProg(advectProg);
+    velocity.read.attach(0); gl.uniform1i(advectProg.u['u_vel'], 0);
+    velocity.read.attach(1); gl.uniform1i(advectProg.u['u_src'], 1);
+    gl.uniform2f(advectProg.u['u_texel'], 1.0/simW, 1.0/simH);
+    gl.uniform1f(advectProg.u['u_dt'], dt);
+    gl.uniform1f(advectProg.u['u_dissipation'], VELOCITY_DISSIPATION);
+    draw(velocity.write.fbo, simW, simH); velocity.swap();
+
+    // divergence
+    useProg(divProg);
+    velocity.read.attach(0); gl.uniform1i(divProg.u['u_vel'], 0);
+    gl.uniform2f(divProg.u['u_texel'], 1.0/simW, 1.0/simH);
+    draw(divergence.fbo, simW, simH);
+
+    // clear pressure with decay
+    useProg(clearProg);
+    pressure.read.attach(0); gl.uniform1i(clearProg.u['u_src'], 0);
+    gl.uniform1f(clearProg.u['u_value'], 0.8);
+    draw(pressure.write.fbo, simW, simH); pressure.swap();
+
+    // pressure iterations
+    useProg(pressureProg);
+    gl.uniform2f(pressureProg.u['u_texel'], 1.0/simW, 1.0/simH);
+    for (let i = 0; i < PRESSURE_ITERS; i++) {
+      pressure.read.attach(0); gl.uniform1i(pressureProg.u['u_p'], 0);
+      divergence.attach(1);     gl.uniform1i(pressureProg.u['u_div'], 1);
+      draw(pressure.write.fbo, simW, simH); pressure.swap();
+    }
+
+    // subtract gradient
+    useProg(gradSubProg);
+    pressure.read.attach(0); gl.uniform1i(gradSubProg.u['u_p'], 0);
+    velocity.read.attach(1); gl.uniform1i(gradSubProg.u['u_vel'], 1);
+    gl.uniform2f(gradSubProg.u['u_texel'], 1.0/simW, 1.0/simH);
+    draw(velocity.write.fbo, simW, simH); velocity.swap();
+
+    // advect the home map — colors are sampled from baseDye[home(uv)]
+    useProg(advectProg);
+    velocity.read.attach(0); gl.uniform1i(advectProg.u['u_vel'], 0);
+    home.read.attach(1);     gl.uniform1i(advectProg.u['u_src'], 1);
+    gl.uniform2f(advectProg.u['u_texel'], 1.0/simW, 1.0/simH);
+    gl.uniform1f(advectProg.u['u_dt'], dt);
+    gl.uniform1f(advectProg.u['u_dissipation'], 1.0);
+    draw(home.write.fbo, dyeW, dyeH); home.swap();
+
+    // Heal: drift home back toward identity. The swirl rewinds along the
+    // path it was deformed by, instead of fading by transparency.
+    // Paused while the user is interacting, then ramped up.
+    const idle = Math.max(0, nowSec() - lastInputTime - HEAL_HOLD_OFF);
+    const idleRamp = pointers.size > 0 ? 0 : Math.min(1, idle / HEAL_RAMP);
+    if (idleRamp > 0) {
+      useProg(healHomeProg);
+      home.read.attach(0); gl.uniform1i(healHomeProg.u['u_home'], 0);
+      gl.uniform1f(healHomeProg.u['u_amount'], 1.0 - Math.exp(-HEAL_RATE * idleRamp * dt));
+      draw(home.write.fbo, dyeW, dyeH); home.swap();
+    }
+  }
+
+  // ---------- render to screen ----------
+  function render() {
+    useProg(displayProg);
+    home.read.attach(0); gl.uniform1i(displayProg.u['u_home'], 0);
+    baseDye.attach(1);   gl.uniform1i(displayProg.u['u_base'], 1);
+    draw(null, canvasW, canvasH);
+  }
+
+  // ---------- input ----------
+  const pointers = new Map();
+  let lastInputTime = -Infinity;
+  let hintGone = false;
+  function dismissHint() {
+    if (hintGone) return;
+    hintGone = true;
+    const el = document.getElementById('hint');
+    if (el) el.classList.add('gone');
+  }
+
+  function nowSec() { return performance.now() / 1000; }
+
+  // Fine "buzz" haptics while finger drags. Short pulses fired at high
+  // rate produce a "ブブブブ" feel rather than a single thud. Vibration
+  // API is supported on Android Chrome/Firefox; iOS Safari has no API
+  // and silently no-ops.
+  const HAPTIC_INTERVAL_MS = 22;
+  const HAPTIC_PULSE_MS    = 4;
+  let lastHapticAt = 0;
+  function buzz() {
+    if (!navigator.vibrate) return;
+    const now = performance.now();
+    if (now - lastHapticAt < HAPTIC_INTERVAL_MS) return;
+    navigator.vibrate(HAPTIC_PULSE_MS);
+    lastHapticAt = now;
+  }
+  function buzzOff() {
+    if (navigator.vibrate) navigator.vibrate(0);
+    lastHapticAt = 0;
+  }
+
+  function onPointerDown(e) {
+    if (e.target !== canvas) return;
+    canvas.setPointerCapture?.(e.pointerId);
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    pointers.set(e.pointerId, { x, y, moved: false });
+    lastInputTime = nowSec();
+    buzz();
+    dismissHint();
+  }
+  function onPointerMove(e) {
+    const p = pointers.get(e.pointerId);
+    if (!p) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    let dx = (x - p.x) / rect.width;
+    let dy = (y - p.y) / rect.height;
+    // limit big jumps
+    const m = Math.hypot(dx, dy);
+    if (m > 0.05) { dx *= 0.05 / m; dy *= 0.05 / m; }
+    const moved = Math.hypot(x - p.x, y - p.y);
+    if (dx === 0 && dy === 0) {
+      // tiny idle wiggle for held finger
+      dx = (Math.random() - 0.5) * 0.001;
+      dy = (Math.random() - 0.5) * 0.001;
+    }
+    splat(x, y, dx, dy);
+    p.x = x; p.y = y; p.moved = true;
+    lastInputTime = nowSec();
+    if (moved > 0.5) buzz();  // skip if finger is essentially still
+  }
+  function onPointerUp(e) {
+    if (pointers.has(e.pointerId)) lastInputTime = nowSec();
+    pointers.delete(e.pointerId);
+    if (pointers.size === 0) buzzOff();
+  }
+
+  canvas.addEventListener('pointerdown', onPointerDown);
+  window.addEventListener('pointermove', onPointerMove);
+  window.addEventListener('pointerup', onPointerUp);
+  window.addEventListener('pointercancel', onPointerUp);
+
+  // prevent gesture zoom on iOS
+  document.addEventListener('gesturestart', e => e.preventDefault());
+  document.addEventListener('touchmove', e => { if (e.target === canvas) e.preventDefault(); }, { passive: false });
+
+  // ---------- theme UI ----------
+  const themesEl = document.getElementById('themes');
+  const titleEl = document.getElementById('title');
+  const nameJaEl = document.getElementById('nameJa');
+  const nameEnEl = document.getElementById('nameEn');
+
+  function buildSwatchBg(colors) {
+    const stops = colors.map((c, i) => {
+      const a = (i / colors.length) * 100;
+      const b = ((i + 1) / colors.length) * 100;
+      return `${c} ${a}%, ${c} ${b}%`;
+    }).join(', ');
+    return `linear-gradient(180deg, ${stops})`;
+  }
+
+  function applyThemeMeta(theme) {
+    currentTheme = theme;
+    titleEl.textContent = theme.name;
+    nameEnEl.textContent = theme.name;
+    nameJaEl.textContent = theme.jp;
+    document.querySelectorAll('.chip').forEach(el => {
+      el.classList.toggle('active', el.dataset.id === theme.id);
+    });
+  }
+
+  // Soft switch: keep current dye, only update the target pattern.
+  // The heal step in the main loop will morph dye toward it.
+  function softSetTheme(theme) {
+    applyThemeMeta(theme);
+    baseSeed = Math.random() * 100.0;
+    paintBase();
+    // ensure the chip is visible in the scroller
+    const chip = themesEl.querySelector(`.chip[data-id="${theme.id}"]`);
+    if (chip) chip.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+  }
+
+  THEMES.forEach(t => {
+    const chip = document.createElement('button');
+    chip.className = 'chip';
+    chip.dataset.id = t.id;
+    chip.innerHTML = `
+      <div class="swatch" style="background: ${buildSwatchBg(t.colors)}"></div>
+      <div class="ja">${t.jp}</div>
+      <div>${t.name}</div>
+    `;
+    chip.addEventListener('click', () => softSetTheme(t));
+    themesEl.appendChild(chip);
+  });
+
+  // reset — instantly restore current theme's initial pattern
+  document.getElementById('reset').addEventListener('click', () => {
+    resetAll();
+  });
+
+  // shuffle — pick a random different theme and morph into it
+  const shuffleBtn = document.getElementById('shuffle');
+  if (shuffleBtn) {
+    shuffleBtn.addEventListener('click', () => {
+      const others = THEMES.filter(t => t.id !== currentTheme.id);
+      const next = others[Math.floor(Math.random() * others.length)];
+      softSetTheme(next);
+    });
+  }
+
+  // ---------- boot ----------
+  function boot() {
+    resize();
+    applyThemeMeta(THEMES[0]);
+    resetAll();
+    let last = performance.now();
+    function frame(now) {
+      const dt = Math.min(0.033, (now - last) / 1000);
+      last = now;
+      if (resize()) { paintBase(); snapToBase(); clearFlow(); }
+      step(dt || 0.016);
+      render();
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>
